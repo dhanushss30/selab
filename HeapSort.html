@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>HeapSort Game</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lucide/0.259.0/umd/lucide.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 16px;
+            background-color: rgb(2, 6, 23);
+            font-family: system-ui, -apple-system, sans-serif;
+        }
+        
+        .card {
+            background-color: rgb(15, 23, 42);
+            border-radius: 8px;
+            color: white;
+            padding: 24px;
+        }
+        
+        .card-header {
+            margin-bottom: 24px;
+        }
+        
+        .card-title {
+            display: flex;
+            flex-direction: row;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+        }
+        
+        .game-title {
+            font-size: 24px;
+            font-weight: bold;
+            color: rgb(96, 165, 250);
+        }
+        
+        .stats {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 16px;
+        }
+        
+        .stat {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background-color: rgb(30, 41, 59);
+            padding: 6px 12px;
+            border-radius: 4px;
+        }
+        
+        .message {
+            text-align: center;
+            margin-bottom: 24px;
+            padding: 12px;
+            border-radius: 4px;
+            font-size: 18px;
+        }
+        
+        .message.playing {
+            background-color: rgba(96, 165, 250, 0.2);
+            color: rgb(96, 165, 250);
+        }
+        
+        .message.error {
+            background-color: rgba(248, 113, 113, 0.2);
+            color: rgb(248, 113, 113);
+        }
+        
+        .message.success {
+            background-color: rgba(74, 222, 128, 0.2);
+            color: rgb(74, 222, 128);
+        }
+        
+        .buttons {
+            display: flex;
+            justify-content: center;
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+        
+        .btn {
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            border: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .btn-primary {
+            background-color: rgb(96, 165, 250);
+            color: white;
+        }
+        
+        .btn-outline {
+            background-color: transparent;
+            border: 1px solid rgb(96, 165, 250);
+            color: rgb(96, 165, 250);
+        }
+        
+        .game-board {
+            position: relative;
+            width: 100%;
+            height: 384px;
+            border: 1px solid rgb(30, 41, 59);
+            border-radius: 8px;
+            background-color: rgb(15, 23, 42);
+        }
+        
+        .node {
+            cursor: pointer;
+            transition: fill 0.2s;
+        }
+        
+        .node circle {
+            stroke-width: 2;
+        }
+        
+        .node text {
+            font-size: 16px;
+            font-weight: 500;
+            user-select: none;
+        }
+        
+        .node.selected circle {
+            fill: rgb(96, 165, 250);
+            stroke: rgb(96, 165, 250);
+        }
+        
+        .node.selected text {
+            fill: white;
+        }
+        
+        .node.hint circle {
+            fill: rgba(245, 158, 11, 0.2);
+            stroke: rgb(245, 158, 11);
+        }
+        
+        .edge {
+            stroke: rgb(30, 41, 59);
+            stroke-width: 2;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="card-header">
+            <div class="card-title">
+                <span class="game-title">HeapSort Game</span>
+                <div class="stats">
+                    <div class="stat">
+                        <i data-lucide="trophy" class="text-yellow-400"></i>
+                        <span id="score">0</span>
+                    </div>
+                    <div class="stat">
+                        <i data-lucide="x" class="text-red-400"></i>
+                        <span id="mistakes">0</span>
+                    </div>
+                    <div class="stat">
+                        <i data-lucide="clock" class="text-blue-400"></i>
+                        <span id="timer">0s</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div id="message" class="message">Welcome! Click "New Game" to start.</div>
+        <div class="buttons">
+            <button class="btn btn-primary" onclick="initializeGame()">New Game</button>
+            <button class="btn btn-outline" onclick="showHint()">
+                <i data-lucide="lightbulb"></i>
+                <span>Show Hint</span>
+            </button>
+        </div>
+        <div class="game-board">
+            <svg viewBox="0 0 800 300" style="width: 100%; height: 100%">
+                <g id="edges"></g>
+                <g id="nodes"></g>
+            </svg>
+        </div>
+    </div>
+
+    <script>
+        // Initialize Lucide icons
+        lucide.createIcons();
+
+        // Game state
+        let heap = [];
+        let gameState = 'init';
+        let score = 0;
+        let mistakes = 0;
+        let timer = 0;
+        let timerInterval;
+        let selectedNodes = [];
+        let expectedSwap = null;
+        let showingHint = false;
+
+        // Helper functions
+        const getParentIndex = (index) => Math.floor((index - 1) / 2);
+        const getLeftChildIndex = (index) => 2 * index + 1;
+        const getRightChildIndex = (index) => 2 * index + 2;
+
+        function calculateNodePosition(index) {
+            const level = Math.floor(Math.log2(index + 1));
+            const nodesInLevel = Math.pow(2, level);
+            const nodePosition = index - (Math.pow(2, level) - 1);
+            
+            const horizontalSpacing = 120;
+            const verticalSpacing = 80;
+            const levelWidth = nodesInLevel * horizontalSpacing;
+            const x = 400 + (nodePosition * horizontalSpacing) - (levelWidth / 2) + (horizontalSpacing / 2);
+            const y = 60 + (level * verticalSpacing);
+            
+            return { x, y };
+        }
+
+        function isMaxHeap(heapArray) {
+            const n = heapArray.length;
+            for (let i = 0; i <= Math.floor(n / 2) - 1; i++) {
+                const left = getLeftChildIndex(i);
+                const right = getRightChildIndex(i);
+                
+                if (left < n && heapArray[i] < heapArray[left]) return false;
+                if (right < n && heapArray[i] < heapArray[right]) return false;
+            }
+            return true;
+        }
+
+        function findNextStep(currentHeap) {
+            const n = currentHeap.length;
+            let lastParentIdx = Math.floor(n / 2) - 1;
+            
+            for (let i = lastParentIdx; i >= 0; i--) {
+                const leftIdx = getLeftChildIndex(i);
+                const rightIdx = getRightChildIndex(i);
+                
+                let largest = i;
+                if (leftIdx < n && currentHeap[leftIdx] > currentHeap[largest]) {
+                    largest = leftIdx;
+                }
+                if (rightIdx < n && currentHeap[rightIdx] > currentHeap[largest]) {
+                    largest = rightIdx;
+                }
+
+                if (largest !== i) {
+                    expectedSwap = { parent: i, child: largest };
+                    return;
+                }
+            }
+            
+            expectedSwap = null;
+            if (isMaxHeap(currentHeap)) {
+                gameState = 'complete';
+                updateMessage('Congratulations! You\'ve successfully built a max heap!', 'success');
+            }
+        }
+
+        function updateMessage(text, type = 'playing') {
+            const messageEl = document.getElementById('message');
+            messageEl.textContent = text;
+            messageEl.className = `message ${type}`;
+        }
+
+        function updateStats() {
+            document.getElementById('score').textContent = score;
+            document.getElementById('mistakes').textContent = mistakes;
+            document.getElementById('timer').textContent = `${timer}s`;
+        }
+
+        function drawHeap() {
+            const edgesGroup = document.getElementById('edges');
+            const nodesGroup = document.getElementById('nodes');
+            
+            // Clear existing elements
+            edgesGroup.innerHTML = '';
+            nodesGroup.innerHTML = '';
+            
+            // Draw edges
+            heap.forEach((_, index) => {
+                const leftChild = getLeftChildIndex(index);
+                const rightChild = getRightChildIndex(index);
+                const parentPos = calculateNodePosition(index);
+                
+                if (leftChild < heap.length) {
+                    const childPos = calculateNodePosition(leftChild);
+                    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    line.setAttribute('x1', parentPos.x);
+                    line.setAttribute('y1', parentPos.y);
+                    line.setAttribute('x2', childPos.x);
+                    line.setAttribute('y2', childPos.y);
+                    line.setAttribute('class', 'edge');
+                    edgesGroup.appendChild(line);
+                }
+                
+                if (rightChild < heap.length) {
+                    const childPos = calculateNodePosition(rightChild);
+                    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    line.setAttribute('x1', parentPos.x);
+                    line.setAttribute('y1', parentPos.y);
+                    line.setAttribute('x2', childPos.x);
+                    line.setAttribute('y2', childPos.y);
+                    line.setAttribute('class', 'edge');
+                    edgesGroup.appendChild(line);
+                }
+            });
+            
+            // Draw nodes
+            heap.forEach((value, index) => {
+                const pos = calculateNodePosition(index);
+                const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                g.setAttribute('transform', `translate(${pos.x}, ${pos.y})`);
+                g.setAttribute('class', `node ${
+                    selectedNodes.includes(index) ? 'selected' : 
+                    showingHint && expectedSwap && (index === expectedSwap.parent || index === expectedSwap.child) ? 'hint' : ''
+                }`);
+                g.onclick = () => handleNodeClick(index);
+                
+                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                circle.setAttribute('r', '24');
+                circle.setAttribute('fill', 'rgb(30, 41, 59)');
+                circle.setAttribute('stroke', 'rgb(51, 65, 85)');
+                
+                const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                text.setAttribute('text-anchor', 'middle');
+                text.setAttribute('dy', '0.3em');
+                text.setAttribute('fill', 'rgb(226, 232, 240)');
+                text.textContent = value;
+                
+                g.appendChild(circle);
+                g.appendChild(text);
+                nodesGroup.appendChild(g);
+            });
+        }
+
+        function handleNodeClick(index) {
+            if (gameState !== 'playing' || !expectedSwap) return;
+
+            if (selectedNodes.length === 0) {
+                if (index === expectedSwap.parent || index === expectedSwap.child) {
+                    selectedNodes = [index];
+                    showingHint = false;
+                    updateMessage('Select the node to swap with.');
+                } else {
+                    updateMessage('Incorrect node selection. Try selecting a parent or child node that needs fixing.', 'error');
+                    mistakes++;
+                }
+            } else if (selectedNodes.length === 1) {
+                const firstNode = selectedNodes[0];
+                
+                if (
+                    (firstNode === expectedSwap.parent && index === expectedSwap.child) ||
+                    (firstNode === expectedSwap.child && index === expectedSwap.parent)
+                ) {
+                    [heap[expectedSwap.parent], heap[expectedSwap.child]] = 
+                    [heap[expectedSwap.child], heap[expectedSwap.parent]];
+                    
+                    score += 5;
+                    updateMessage('Correct swap! Keep going!');
+                    findNextStep(heap);
+                } else {
+                    updateMessage('Invalid swap! Choose the correct nodes to swap.', 'error');
+                    mistakes++;
+                }
+                selectedNodes = [];
+            }
+            
+            updateStats();
+            drawHeap();
+        }
+
+        function showHint() {
+            if (gameState === 'playing' && expectedSwap) {
+                showingHint = true;
+                updateMessage('Highlighted nodes need to be swapped to maintain max heap property.');
+                drawHeap();
+            }
+        }
+
+        function initializeGame() {
+            // Clear previous timer if exists
+            if (timerInterval) {
+                clearInterval(timerInterval);
+            }
+            
+            // Initialize game state
+            heap = Array.from({ length: 7 }, () => Math.floor(Math.random() * 100));
+            gameState = 'playing';
+            score = 0;
+            mistakes = 0;
+            timer = 0;
+            selectedNodes = [];
+            showingHint = false;
+            
+            // Start timer
+            timerInterval = setInterval(() => {
+                timer++;
+                updateStats();
+            }, 1000);
+            
+            // Initialize game
+            findNextStep(heap);
+            updateMessage('Start building the max heap from bottom-most parent nodes.');
+            updateStats();
+            drawHeap();
+        }
+    </script>
+</body>
+</html>
